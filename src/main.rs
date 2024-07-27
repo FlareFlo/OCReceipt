@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::ops::Index;
 use std::time::Instant;
-use image::{GenericImage, GenericImageView, ImageBuffer, ImageReader, Rgb, RgbImage};
+use image::{GenericImage, GenericImageView, ImageReader, Rgb, RgbImage};
 
 fn main() {
     let img = ImageReader::open("receipt.jpg").unwrap().decode().unwrap();
@@ -9,7 +9,50 @@ fn main() {
     let mut img: RgbImage = image::imageops::rotate270(&img).into();
 
     let start_contrast = Instant::now();
-    // Apply contrast filter
+    add_contrast_filter(&mut img);
+    let end_contrast = start_contrast.elapsed();
+
+    img.save("receipt_contrast.png").unwrap();
+
+    let start_blob = Instant::now();
+    let all_bounds = blob_find(&img);
+    let end_blob = start_blob.elapsed();
+
+    let start_boxes = Instant::now();
+    draw_bounding_boxes(&mut img, &all_bounds);
+    let end_boxes = start_boxes.elapsed();
+
+    img.save("receipt_with_bounding_boxes.png").unwrap();
+
+    let time_contrast = end_contrast.as_millis();
+    let time_blob = end_blob.as_millis();
+    let time_boxes = end_boxes.as_millis();
+
+    println!("Contrast took {time_contrast} millis");
+    println!("Blob find took {time_blob} millis");
+    println!("Boxes took {time_boxes} millis");
+}
+
+fn draw_bounding_boxes(img: &mut RgbImage, all_bounds: &HashSet<((u32, u32), (u32, u32))>) {
+    let (width, height) = img.dimensions();
+    let box_color = Rgb([0, 255, 0]);
+    for (top_left, bottom_right) in all_bounds {
+        for x in (top_left.0..=bottom_right.0) {
+            if x > 0 && x < width {
+                img.put_pixel(x, top_left.1, box_color.clone());
+                img.put_pixel(x, bottom_right.1, box_color.clone());
+            }
+        }
+        for y in (top_left.1..=bottom_right.1) {
+            if y > 0 && y < height {
+                img.put_pixel(top_left.0, y, box_color.clone());
+                img.put_pixel(bottom_right.0, y, box_color.clone());
+            }
+        }
+    }
+}
+
+fn add_contrast_filter(img: &mut RgbImage) {
     for pixel in img.enumerate_pixels_mut() {
         let rgb_values = &mut pixel.2.0;
         let luma = 0.2126f32 * rgb_values[0] as f32
@@ -25,16 +68,13 @@ fn main() {
             rgb_values[2] = 255;
         }
     }
-    let end_contrast = start_contrast.elapsed();
+}
 
-    img.save("receipt_contrast.png").unwrap();
-
-    let start_blob = Instant::now();
+fn blob_find(img: &RgbImage) -> HashSet<((u32, u32), (u32, u32))> {
     let mut black_pixels: Vec<_> = img
         .enumerate_pixels()
         .filter(|p| is_black(&p.2.0))
         .collect();
-    let (width, height) = img.dimensions();
     let mut all_bounds = HashSet::new();
     let mut visited = HashSet::new();
     let mut stack = Vec::new();
@@ -69,36 +109,8 @@ fn main() {
         all_bounds.insert(bounds);
         stack.clear();
     }
-    let end_blob = start_blob.elapsed();
 
-    // Add colored bounding boxes on image
-    let start_boxes = Instant::now();
-    let box_color = Rgb([0, 255, 0]);
-    for (top_left, bottom_right) in all_bounds {
-        for x in (top_left.0..=bottom_right.0) {
-            if x > 0 && x < width {
-                img.put_pixel(x, top_left.1, box_color.clone());
-                img.put_pixel(x, bottom_right.1, box_color.clone());
-            }
-        }
-        for y in (top_left.1..=bottom_right.1) {
-            if y > 0 && y < height {
-                img.put_pixel(top_left.0, y, box_color.clone());
-                img.put_pixel(bottom_right.0, y, box_color.clone());
-            }
-        }
-    }
-    let end_boxes = start_boxes.elapsed();
-
-    img.save("receipt_with_bounding_boxes.png").unwrap();
-
-    let time_contrast = end_contrast.as_millis();
-    let time_blob = end_blob.as_millis();
-    let time_boxes = end_boxes.as_millis();
-
-    println!("Contrast took {time_contrast} millis");
-    println!("Blob find took {time_blob} millis");
-    println!("Boxes took {time_boxes} millis");
+    all_bounds
 }
 
 fn print_bounds(
