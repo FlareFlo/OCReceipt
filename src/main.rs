@@ -18,6 +18,11 @@ fn main() {
     let all_bounds = blob_find(&img);
     let end_blob = start_blob.elapsed();
 
+
+    // Find top left blob, already pre-sort by starting height (top left pixel)
+
+
+
     let start_boxes = Instant::now();
     draw_bounding_boxes(&mut img, &all_bounds);
     let end_boxes = start_boxes.elapsed();
@@ -33,7 +38,7 @@ fn main() {
     println!("Boxes took {time_boxes} millis");
 }
 
-fn draw_bounding_boxes(img: &mut RgbImage, all_bounds: &HashSet<((u32, u32), (u32, u32))>) {
+fn draw_bounding_boxes(img: &mut RgbImage, all_bounds: &Vec<((u32, u32), (u32, u32))>) {
     let (width, height) = img.dimensions();
     let box_color = Rgb([0, 255, 0]);
     for (top_left, bottom_right) in all_bounds {
@@ -70,12 +75,12 @@ fn add_contrast_filter(img: &mut RgbImage) {
     }
 }
 
-fn blob_find(img: &RgbImage) -> HashSet<((u32, u32), (u32, u32))> {
+fn blob_find(img: &RgbImage) -> Vec<((u32, u32), (u32, u32))> {
     let mut black_pixels: Vec<_> = img
         .enumerate_pixels()
         .filter(|p| is_black(&p.2.0))
         .collect();
-    let mut all_bounds = HashSet::new();
+    let mut all_bounds = Vec::new();
     let mut visited = HashSet::new();
     let mut stack = Vec::new();
     while !black_pixels.is_empty() {
@@ -106,7 +111,7 @@ fn blob_find(img: &RgbImage) -> HashSet<((u32, u32), (u32, u32))> {
         }
 
         //print_bounds(&bounds);
-        all_bounds.insert(bounds);
+        all_bounds.push(bounds);
         stack.clear();
     }
 
