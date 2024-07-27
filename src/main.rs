@@ -26,43 +26,41 @@ fn main() {
 
     img.save("receipt_contrast.png").unwrap();
 
+    let mut black_pixels: Vec<_> = img
+        .enumerate_pixels()
+        .filter(|p| is_black(&p.2.0))
+        .collect();
     let (width, height) = img.dimensions();
     let mut all_bounds = HashSet::new();
-    for y in (10..height).step_by(10) {
-        // TODO: x += right_bound oder so, dann haben wir weniger duplicates
-        for x in (0..width).step_by(3) {
-            if is_black(&img.get_pixel(x, y).0) {
-                let mut stack = Vec::new();
-                stack.push((x, y));
-                let mut bounds = new_bounds();
-                let mut visited = HashSet::new();
-                while !stack.is_empty() {
-                    let (curr_x, curr_y) = stack.pop().unwrap(); // it exists (!stack.is_empty())
-                    if visited.contains(&(curr_x, curr_y)) {
-                        continue;
-                    }
-                    let pixel = img.get_pixel_checked(curr_x, curr_y);
-                    if let Some(pixel) = pixel {
-                        if is_black(&pixel.0) {
-                            update_bounds(&mut bounds, (curr_x, curr_y));
-                            stack.push((curr_x + 1, curr_y));
-                            stack.push((curr_x, curr_y + 1));
-                            stack.push((curr_x - 1, curr_y));
-                            stack.push((curr_x , curr_y - 1));
-                        }
-                    }
-
-                    visited.insert((curr_x, curr_y));
-                }
-                if !all_bounds.contains(&bounds) {
-                    print_bounds(&bounds);
-                }
-                all_bounds.insert(bounds);
-                visited.clear();
+    let mut visited = HashSet::new();
+    let mut stack = Vec::new();
+    while !black_pixels.is_empty() {
+        let pixel = black_pixels.pop().unwrap(); // it exists (!stack.is_empty())
+        stack.push((pixel.0, pixel.1));
+        let mut bounds = new_bounds();
+        while !stack.is_empty() {
+            let (curr_x, curr_y) = stack.pop().unwrap(); // it exists (!stack.is_empty())
+            if visited.contains(&(curr_x, curr_y)) {
+                continue;
             }
-        }
-    }
 
+            let pixel = img.get_pixel_checked(curr_x, curr_y);
+            if let Some(pixel) = pixel {
+                if is_black(&pixel.0) {
+                    update_bounds(&mut bounds, (curr_x, curr_y));
+                    stack.push((curr_x + 1, curr_y));
+                    stack.push((curr_x, curr_y + 1));
+                    stack.push((curr_x - 1, curr_y));
+                    stack.push((curr_x , curr_y - 1));
+                }
+            }
+
+            visited.insert((curr_x, curr_y));
+        }
+
+        all_bounds.insert(bounds);
+        stack.clear();
+    }
 
     // Add colored bounding boxes on image
     let box_color = Rgb([0, 255, 0]);
