@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::ops::Index;
+use std::time::Instant;
 use image::{GenericImage, GenericImageView, ImageBuffer, ImageReader, Rgb, RgbImage};
 
 fn main() {
@@ -7,6 +8,7 @@ fn main() {
     let img = img.to_rgb8();
     let mut img: RgbImage = image::imageops::rotate270(&img).into();
 
+    let start_contrast = Instant::now();
     // Apply contrast filter
     for pixel in img.enumerate_pixels_mut() {
         let rgb_values = &mut pixel.2.0;
@@ -23,9 +25,11 @@ fn main() {
             rgb_values[2] = 255;
         }
     }
+    let end_contrast = start_contrast.elapsed();
 
     img.save("receipt_contrast.png").unwrap();
 
+    let start_blob = Instant::now();
     let mut black_pixels: Vec<_> = img
         .enumerate_pixels()
         .filter(|p| is_black(&p.2.0))
@@ -37,6 +41,9 @@ fn main() {
     while !black_pixels.is_empty() {
         let pixel = black_pixels.pop().unwrap(); // it exists (!stack.is_empty())
         stack.push((pixel.0, pixel.1));
+        if visited.contains(&(pixel.0, pixel.1)) {
+            continue;
+        }
         let mut bounds = new_bounds();
         while !stack.is_empty() {
             let (curr_x, curr_y) = stack.pop().unwrap(); // it exists (!stack.is_empty())
@@ -58,11 +65,14 @@ fn main() {
             visited.insert((curr_x, curr_y));
         }
 
+        //print_bounds(&bounds);
         all_bounds.insert(bounds);
         stack.clear();
     }
+    let end_blob = start_blob.elapsed();
 
     // Add colored bounding boxes on image
+    let start_boxes = Instant::now();
     let box_color = Rgb([0, 255, 0]);
     for (top_left, bottom_right) in all_bounds {
         for x in (top_left.0..=bottom_right.0) {
@@ -78,8 +88,17 @@ fn main() {
             }
         }
     }
+    let end_boxes = start_boxes.elapsed();
 
     img.save("receipt_with_bounding_boxes.png").unwrap();
+
+    let time_contrast = end_contrast.as_millis();
+    let time_blob = end_blob.as_millis();
+    let time_boxes = end_boxes.as_millis();
+
+    println!("Contrast took {time_contrast} millis");
+    println!("Blob find took {time_blob} millis");
+    println!("Boxes took {time_boxes} millis");
 }
 
 fn print_bounds(
