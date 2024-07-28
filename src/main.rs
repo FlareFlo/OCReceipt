@@ -4,18 +4,31 @@ use std::ops::Index;
 use std::time::Instant;
 use image::{ImageReader, Rgb, RgbImage};
 
-#[derive(Hash, Eq, PartialEq, Debug)]
+#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
 struct Point {
     pub x: u32,
     pub y: u32,
 }
-#[derive(Hash, Eq, PartialEq, Debug)]
+#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
 struct BoundBox {
     pub top_left: Point,
     pub bottom_right: Point,
 }
 
 impl BoundBox {
+    fn height(&self) -> u32 {
+        self.bottom_right.y - self.top_left.y
+    }
+
+    fn width(&self) -> u32 {
+        self.bottom_right.y - self.top_left.y
+    }
+
+    fn middle_point(&self) -> Point {
+        let x = self.bottom_right.x - (self.width() / 2);
+        let y = self.bottom_right.y - (self.height() / 2);
+        Point { x, y }
+    }
 }
 
 impl From<((u32, u32), (u32, u32))> for BoundBox {
@@ -70,8 +83,9 @@ fn main() {
         && (row_box.bottom_right.y as i32 - other_bound.bottom_right.y as i32) >= 0
     }
 
+    let begin_row_candidates = Instant::now();
     let (width, height) = img.dimensions();
-    let mut rows = Vec::new();
+    let mut row_candidates = Vec::new();
     let mut visited = HashSet::new();
     let mut row_box: BoundBox;
     for bound in &all_bounds {
@@ -82,44 +96,53 @@ fn main() {
         for other_bound in &all_bounds {
             if visited.contains(other_bound) { continue }
             if is_inside(&row_box, &other_bound.into()) {
-                row.push(other_bound);
+                let bound_box: BoundBox = other_bound.into();
+                row.push(bound_box);
                 visited.insert(other_bound);
             }
         }
 
-        rows.push(row);
+        row_candidates.push(row);
+    }
+    let end_row_candidates = begin_row_candidates.elapsed();
+
+    println!("Rows length: {}", row_candidates.len());
+    //draw_bounding_boxes_for_row(&mut img, &row_candidates[20]);
+
+    fn distance(a: Point, b: Point) -> f32 {
+        let x = (b.x - a.x).pow(2) as f32;
+        let y = (b.y - a.y).pow(2) as f32;
+        (x + y).sqrt()
     }
 
-    let mut row = Vec::new();
-    for x in rows[1].clone() {
-        row.push(x.into());
+    // Post process the rows
+    let mut visited = HashSet::new();
+    let mut rows_cleaned = Vec::new();
+    for candidate in &row_candidates {
+        let average_y = candidate.iter()
+            .map(|b| (b.bottom_right.y - (b.height() / 2)))
+            .sum::<u32>() / candidate.len() as u32;
+        let average_height = candidate.iter()
+            .map(|b| b.height())
+            .sum::<u32>() / candidate.len() as u32;
+        let mut cleaned_row = Vec::new();
+        for bound_box in &all_bounds {
+            let bound_box: BoundBox = bound_box.into();
+            if visited.contains(&bound_box) { continue }
+            let distance_to_average_y = bound_box.middle_point().y.abs_diff(average_y);
+            if distance_to_average_y < average_height {
+                visited.insert(bound_box.clone());
+                cleaned_row.push(bound_box);
+            }
+        }
+
+        rows_cleaned.push(cleaned_row);
     }
-    draw_bounding_boxes_for_row(&mut img, row);
+
+    draw_bounding_boxes_for_row(&mut img, &rows_cleaned[3]);
 
 
 
-
-
-    // let (width, height) = img.dimensions();
-    // let box_color = Rgb([255, 0, 0]);
-    // let mut counter = 0;
-    // for (top_left, bottom_right) in &all_bounds {
-    //     if counter > 30 { break }
-    //     for x in (top_left.0..=bottom_right.0) {
-    //         if x > 0 && x < width {
-    //             img.put_pixel(x, top_left.1, box_color.clone());
-    //             img.put_pixel(x, bottom_right.1, box_color.clone());
-    //         }
-    //     }
-    //     for y in (top_left.1..=bottom_right.1) {
-    //         if y > 0 && y < height {
-    //             img.put_pixel(top_left.0, y, box_color.clone());
-    //             img.put_pixel(bottom_right.0, y, box_color.clone());
-    //         }
-    //     }
-    //
-    //     counter += 1;
-    // }
 
     // Gedankendump:
     /*
@@ -148,23 +171,25 @@ fn main() {
     let time_contrast = end_contrast.as_millis();
     let time_blob = end_blob.as_millis();
     let time_boxes = end_boxes.as_millis();
+    let row_candidates = end_row_candidates.as_micros();
 
     println!("Contrast took {time_contrast} millis");
     println!("Blob find took {time_blob} millis");
     println!("Boxes took {time_boxes} millis");
+    println!("Row candidates took {row_candidates} micros");
 }
 
 fn draw_bounding_boxes(img: &mut RgbImage, all_bounds: &Vec<((u32, u32), (u32, u32))>) {
     let (width, height) = img.dimensions();
     let box_color = Rgb([0, 255, 0]);
     for (top_left, bottom_right) in all_bounds {
-        for x in (top_left.0..=bottom_right.0) {
+        for x in top_left.0..=bottom_right.0 {
             if x > 0 && x < width {
                 img.put_pixel(x, top_left.1, box_color.clone());
                 img.put_pixel(x, bottom_right.1, box_color.clone());
             }
         }
-        for y in (top_left.1..=bottom_right.1) {
+        for y in top_left.1..=bottom_right.1 {
             if y > 0 && y < height {
                 img.put_pixel(top_left.0, y, box_color.clone());
                 img.put_pixel(bottom_right.0, y, box_color.clone());
@@ -173,17 +198,17 @@ fn draw_bounding_boxes(img: &mut RgbImage, all_bounds: &Vec<((u32, u32), (u32, u
     }
 }
 
-fn draw_bounding_boxes_for_row(img: &mut RgbImage, row: Vec<BoundBox>) {
+fn draw_bounding_boxes_for_row(img: &mut RgbImage, row: &Vec<BoundBox>) {
     let (width, height) = img.dimensions();
     let box_color = Rgb([255, 0, 0]);
     for bounding_box in row {
-        for x in (bounding_box.top_left.x..=bounding_box.bottom_right.x) {
+        for x in bounding_box.top_left.x..=bounding_box.bottom_right.x {
             if x > 0 && x < width {
                 img.put_pixel(x, bounding_box.top_left.y, box_color.clone());
                 img.put_pixel(x, bounding_box.bottom_right.y, box_color.clone());
             }
         }
-        for y in (bounding_box.top_left.y..=bounding_box.bottom_right.y) {
+        for y in bounding_box.top_left.y..=bounding_box.bottom_right.y {
             if y > 0 && y < height {
                 img.put_pixel(bounding_box.top_left.x, y, box_color.clone());
                 img.put_pixel(bounding_box.bottom_right.x, y, box_color.clone());
