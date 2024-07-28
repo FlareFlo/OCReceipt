@@ -132,8 +132,8 @@ fn main() {
         }
 
         if !cleaned_row.is_empty() {
+            heights.push((average_y, cleaned_row.clone()));
             rows_cleaned.push(cleaned_row);
-            heights.push(average_y);
             println!("average_y {average_y}");
         }
     }
@@ -148,10 +148,10 @@ fn main() {
             a.top_left.x.cmp(&b.top_left.x)
         });
         let a = rows_cleaned[i][0].top_left.y;
-        println!("Height: {}, top_left: {a}", heights[i]);
+        println!("Height: {}, top_left: {a}", heights[i].0);
         // TODO: remove; for debugging
         for j in 0..width {
-            img.put_pixel(j, heights[i], color.clone());
+            img.put_pixel(j, heights[i].0, color.clone());
         }
     }
 
@@ -303,7 +303,7 @@ fn blob_find(img: &RgbImage) -> Vec<((u32, u32), (u32, u32))> {
 
             visited.insert((curr_x, curr_y));
         }
-
+average_y
         //print_bounds(&bounds);
         all_bounds.push(bounds);
         stack.clear();
