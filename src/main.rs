@@ -61,11 +61,14 @@ fn main() {
     let mut all_bounds = blob_find(&img);
     let end_blob = start_blob.elapsed();
 
+    let mut all_bounds = all_bounds.iter()
+        .map(BoundBox::from)
+        .collect::<Vec<_>>();
 
     all_bounds.sort_by(|a, b| {
-        if a.0.1 < b.0.1 {
+        if a.top_left.y < b.top_left.y {
             Ordering::Less
-        } else if a.0.0 == b.0.0 && a.0.1 == b.0.1 {
+        } else if a.top_left.x == b.top_left.x && a.top_left.y == b.top_left.y {
             Ordering::Equal
         } else {
             Ordering::Greater
@@ -83,14 +86,13 @@ fn main() {
     let mut row_box: BoundBox;
     for bound in &all_bounds {
         if visited.contains(bound) { continue; }
-        row_box = ((0, bound.0.1.saturating_sub(25)), (width, bound.1.1 + 25)).into();
+        row_box = ((0, bound.top_left.y.saturating_sub(25)), (width, bound.bottom_right.y + 25)).into();
 
         let mut row = Vec::new();
         for other_bound in &all_bounds {
             if visited.contains(other_bound) { continue }
-            if is_inside(&row_box, &other_bound.into()) {
-                let bound_box: BoundBox = other_bound.into();
-                row.push(bound_box);
+            if is_inside(&row_box, other_bound) {
+                row.push(other_bound);
                 visited.insert(other_bound);
             }
         }
@@ -122,8 +124,7 @@ fn main() {
             .sum::<u32>() / candidate.len() as u32;
         let mut cleaned_row = Vec::new();
         for bound_box in &all_bounds {
-            let bound_box: BoundBox = bound_box.into();
-            if visited.contains(&bound_box) { continue }
+            if visited.contains(bound_box) { continue }
             let distance_to_average_y = bound_box.middle_point().y.abs_diff(average_y);
             if distance_to_average_y < average_height {
                 visited.insert(bound_box.clone());
@@ -164,7 +165,8 @@ fn main() {
         .open("balls.csv").unwrap();
 
     for bound in &all_bounds {
-        let ((x, y), _) = bound;
+        let x = bound.top_left.x;
+        let y = bound.top_left.y;
         use std::io::Write;
         writeln!(csv, "{y}").unwrap();
     }
@@ -235,7 +237,7 @@ fn draw_bounding_boxes(img: &mut RgbImage, all_bounds: &Vec<((u32, u32), (u32, u
     }
 }
 
-fn draw_bounding_boxes_for_row(img: &mut RgbImage, row: &Vec<BoundBox>, color: Rgb<u8>) {
+fn draw_bounding_boxes_for_row(img: &mut RgbImage, row: &Vec<&BoundBox>, color: Rgb<u8>) {
     let (width, height) = img.dimensions();
     for bounding_box in row {
         for x in bounding_box.top_left.x..=bounding_box.bottom_right.x {
@@ -303,7 +305,7 @@ fn blob_find(img: &RgbImage) -> Vec<((u32, u32), (u32, u32))> {
 
             visited.insert((curr_x, curr_y));
         }
-average_y
+
         //print_bounds(&bounds);
         all_bounds.push(bounds);
         stack.clear();
@@ -314,23 +316,25 @@ average_y
 
 #[allow(unused)]
 fn print_bounds(
-    (top_left, bottom_right): &((u32, u32), (u32, u32))
+    bounds: &BoundBox,
 ) {
-    let size = bounds_size(&(*top_left, *bottom_right));
+    let (top_left, bottom_right) = (bounds.top_left, bounds.bottom_right);
+    let size = bounds_size(&bounds);
     println!(
         "top left: ({}, {}), bottom right: ({}, {}), size: {}",
-        top_left.0,
-        top_left.1,
-        bottom_right.0,
-        bottom_right.1,
+        top_left.x,
+        top_left.y,
+        bottom_right.x,
+        bottom_right.y,
         size,
     )
 }
 
 fn bounds_size(
-    (top_left, bottom_right): &((u32, u32), (u32, u32))
+    bounds: &BoundBox,
 ) -> u32 {
-    (bottom_right.0 - top_left.0) * (bottom_right.1 - top_left.1)
+    let (top_left, bottom_right) = (bounds.top_left, bounds.bottom_right);
+    (bottom_right.x - top_left.x) * (bottom_right.y - top_left.y)
 }
 
 fn update_bounds(
