@@ -76,13 +76,6 @@ fn main() {
         print_bounds(bound);
     }
 
-    fn is_inside(row_box: &BoundBox, other_bound: &BoundBox) -> bool {
-        (other_bound.top_left.x as i32 - row_box.top_left.x as i32) >= 0
-        && (other_bound.top_left.y as i32 - row_box.top_left.y as i32) >= 0
-        && (row_box.bottom_right.x as i32 - other_bound.bottom_right.x as i32) >= 0
-        && (row_box.bottom_right.y as i32 - other_bound.bottom_right.y as i32) >= 0
-    }
-
     let begin_row_candidates = Instant::now();
     let (width, height) = img.dimensions();
     let mut row_candidates = Vec::new();
@@ -115,7 +108,9 @@ fn main() {
         (x + y).sqrt()
     }
 
+    let mut heights = Vec::new(); // TODO: remove; used for debugging
     // Post process the rows
+    let post_process_start = Instant::now();
     let mut visited = HashSet::new();
     let mut rows_cleaned = Vec::new();
     for candidate in &row_candidates {
@@ -136,12 +131,43 @@ fn main() {
             }
         }
 
-        rows_cleaned.push(cleaned_row);
+        if !cleaned_row.is_empty() {
+            rows_cleaned.push(cleaned_row);
+            heights.push(average_y);
+            println!("average_y {average_y}");
+        }
+    }
+    let post_process_end = post_process_start.elapsed();
+
+    let mut colors = [[255, 0, 0], [0, 255, 0], [0, 0, 255]].iter().cycle();
+    for i in 0..rows_cleaned.len() {
+        let color = colors.next().unwrap().clone();
+        let color = Rgb(color);
+        draw_bounding_boxes_for_row(&mut img, &rows_cleaned[i], color);
+        rows_cleaned[i].sort_by(|a, b| {
+            a.top_left.x.cmp(&b.top_left.x)
+        });
+        let a = rows_cleaned[i][0].top_left.y;
+        println!("Height: {}, top_left: {a}", heights[i]);
+        // TODO: remove; for debugging
+        for j in 0..width {
+            img.put_pixel(j, heights[i], color.clone());
+        }
     }
 
-    draw_bounding_boxes_for_row(&mut img, &rows_cleaned[3]);
+    //draw_bounding_boxes_for_row(&mut img, &rows_cleaned[2], Rgb([255, 0, 0]));
 
 
+    let mut csv = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open("balls.csv").unwrap();
+
+    for bound in &all_bounds {
+        let ((x, y), _) = bound;
+        use std::io::Write;
+        writeln!(csv, "{y}").unwrap();
+    }
 
 
     // Gedankendump:
@@ -172,11 +198,22 @@ fn main() {
     let time_blob = end_blob.as_millis();
     let time_boxes = end_boxes.as_millis();
     let row_candidates = end_row_candidates.as_micros();
+    let post_process = post_process_end.as_micros();
 
     println!("Contrast took {time_contrast} millis");
     println!("Blob find took {time_blob} millis");
     println!("Boxes took {time_boxes} millis");
     println!("Row candidates took {row_candidates} micros");
+    println!("Post process took {post_process} micros");
+}
+
+
+// TODO: Refactor this for like box.is_inside(other_box) or smth
+fn is_inside(row_box: &BoundBox, other_bound: &BoundBox) -> bool {
+    (other_bound.top_left.x as i32 - row_box.top_left.x as i32) >= 0
+        && (other_bound.top_left.y as i32 - row_box.top_left.y as i32) >= 0
+        && (row_box.bottom_right.x as i32 - other_bound.bottom_right.x as i32) >= 0
+        && (row_box.bottom_right.y as i32 - other_bound.bottom_right.y as i32) >= 0
 }
 
 fn draw_bounding_boxes(img: &mut RgbImage, all_bounds: &Vec<((u32, u32), (u32, u32))>) {
@@ -198,20 +235,19 @@ fn draw_bounding_boxes(img: &mut RgbImage, all_bounds: &Vec<((u32, u32), (u32, u
     }
 }
 
-fn draw_bounding_boxes_for_row(img: &mut RgbImage, row: &Vec<BoundBox>) {
+fn draw_bounding_boxes_for_row(img: &mut RgbImage, row: &Vec<BoundBox>, color: Rgb<u8>) {
     let (width, height) = img.dimensions();
-    let box_color = Rgb([255, 0, 0]);
     for bounding_box in row {
         for x in bounding_box.top_left.x..=bounding_box.bottom_right.x {
             if x > 0 && x < width {
-                img.put_pixel(x, bounding_box.top_left.y, box_color.clone());
-                img.put_pixel(x, bounding_box.bottom_right.y, box_color.clone());
+                img.put_pixel(x, bounding_box.top_left.y, color.clone());
+                img.put_pixel(x, bounding_box.bottom_right.y, color.clone());
             }
         }
         for y in bounding_box.top_left.y..=bounding_box.bottom_right.y {
             if y > 0 && y < height {
-                img.put_pixel(bounding_box.top_left.x, y, box_color.clone());
-                img.put_pixel(bounding_box.bottom_right.x, y, box_color.clone());
+                img.put_pixel(bounding_box.top_left.x, y, color.clone());
+                img.put_pixel(bounding_box.bottom_right.x, y, color.clone());
             }
         }
     }
