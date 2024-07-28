@@ -4,6 +4,35 @@ use std::ops::Index;
 use std::time::Instant;
 use image::{ImageReader, Rgb, RgbImage};
 
+#[derive(Hash, Eq, PartialEq, Debug)]
+struct Point {
+    pub x: u32,
+    pub y: u32,
+}
+#[derive(Hash, Eq, PartialEq, Debug)]
+struct BoundBox {
+    pub top_left: Point,
+    pub bottom_right: Point,
+}
+
+impl BoundBox {
+}
+
+impl From<((u32, u32), (u32, u32))> for BoundBox {
+    fn from(value: ((u32, u32), (u32, u32))) -> Self {
+        Self::from(&value)
+    }
+}
+
+impl From<&((u32, u32), (u32, u32))> for BoundBox {
+    fn from(value: &((u32, u32), (u32, u32))) -> Self {
+        Self {
+            top_left: Point { x: value.0.0, y: value.0.1 },
+            bottom_right: Point { x: value.1.0, y: value.1.1 },
+        }
+    }
+}
+
 fn main() {
     let img = ImageReader::open("receipt.jpg").unwrap().decode().unwrap();
     let img = img.to_rgb8();
@@ -20,9 +49,8 @@ fn main() {
     let end_blob = start_blob.elapsed();
 
 
-    // Find top left blob, already pre-sort by starting height (top left pixel)
     all_bounds.sort_by(|a, b| {
-        if a.0.0 < b.0.0 || a.0.1 < b.0.1 {
+        if a.0.1 < b.0.1 {
             Ordering::Less
         } else if a.0.0 == b.0.0 && a.0.1 == b.0.1 {
             Ordering::Equal
@@ -30,9 +58,69 @@ fn main() {
             Ordering::Greater
         }
     });
+
     for bound in &all_bounds {
         print_bounds(bound);
     }
+
+    fn is_inside(row_box: &BoundBox, other_bound: &BoundBox) -> bool {
+        (other_bound.top_left.x as i32 - row_box.top_left.x as i32) >= 0
+        && (other_bound.top_left.y as i32 - row_box.top_left.y as i32) >= 0
+        && (row_box.bottom_right.x as i32 - other_bound.bottom_right.x as i32) >= 0
+        && (row_box.bottom_right.y as i32 - other_bound.bottom_right.y as i32) >= 0
+    }
+
+    let (width, height) = img.dimensions();
+    let mut rows = Vec::new();
+    let mut visited = HashSet::new();
+    let mut row_box: BoundBox;
+    for bound in &all_bounds {
+        if visited.contains(bound) { continue; }
+        row_box = ((0, bound.0.1.saturating_sub(25)), (width, bound.1.1 + 25)).into();
+
+        let mut row = Vec::new();
+        for other_bound in &all_bounds {
+            if visited.contains(other_bound) { continue }
+            if is_inside(&row_box, &other_bound.into()) {
+                row.push(other_bound);
+                visited.insert(other_bound);
+            }
+        }
+
+        rows.push(row);
+    }
+
+    let mut row = Vec::new();
+    for x in rows[1].clone() {
+        row.push(x.into());
+    }
+    draw_bounding_boxes_for_row(&mut img, row);
+
+
+
+
+
+    // let (width, height) = img.dimensions();
+    // let box_color = Rgb([255, 0, 0]);
+    // let mut counter = 0;
+    // for (top_left, bottom_right) in &all_bounds {
+    //     if counter > 30 { break }
+    //     for x in (top_left.0..=bottom_right.0) {
+    //         if x > 0 && x < width {
+    //             img.put_pixel(x, top_left.1, box_color.clone());
+    //             img.put_pixel(x, bottom_right.1, box_color.clone());
+    //         }
+    //     }
+    //     for y in (top_left.1..=bottom_right.1) {
+    //         if y > 0 && y < height {
+    //             img.put_pixel(top_left.0, y, box_color.clone());
+    //             img.put_pixel(bottom_right.0, y, box_color.clone());
+    //         }
+    //     }
+    //
+    //     counter += 1;
+    // }
+
     // Gedankendump:
     /*
         Nimm die ersten Buchstaben die irgendwie groß genug sind maybe, maybe Größe erstmal
@@ -52,7 +140,7 @@ fn main() {
 
 
     let start_boxes = Instant::now();
-    draw_bounding_boxes(&mut img, &all_bounds);
+    //draw_bounding_boxes(&mut img, &all_bounds);
     let end_boxes = start_boxes.elapsed();
 
     img.save("receipt_with_bounding_boxes.png").unwrap();
@@ -80,6 +168,25 @@ fn draw_bounding_boxes(img: &mut RgbImage, all_bounds: &Vec<((u32, u32), (u32, u
             if y > 0 && y < height {
                 img.put_pixel(top_left.0, y, box_color.clone());
                 img.put_pixel(bottom_right.0, y, box_color.clone());
+            }
+        }
+    }
+}
+
+fn draw_bounding_boxes_for_row(img: &mut RgbImage, row: Vec<BoundBox>) {
+    let (width, height) = img.dimensions();
+    let box_color = Rgb([255, 0, 0]);
+    for bounding_box in row {
+        for x in (bounding_box.top_left.x..=bounding_box.bottom_right.x) {
+            if x > 0 && x < width {
+                img.put_pixel(x, bounding_box.top_left.y, box_color.clone());
+                img.put_pixel(x, bounding_box.bottom_right.y, box_color.clone());
+            }
+        }
+        for y in (bounding_box.top_left.y..=bounding_box.bottom_right.y) {
+            if y > 0 && y < height {
+                img.put_pixel(bounding_box.top_left.x, y, box_color.clone());
+                img.put_pixel(bounding_box.bottom_right.x, y, box_color.clone());
             }
         }
     }
