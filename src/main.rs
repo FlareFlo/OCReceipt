@@ -1,7 +1,8 @@
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::ops::Index;
 use std::time::Instant;
-use image::{GenericImage, GenericImageView, ImageReader, Rgb, RgbImage};
+use image::{ImageReader, Rgb, RgbImage};
 
 fn main() {
     let img = ImageReader::open("receipt.jpg").unwrap().decode().unwrap();
@@ -15,12 +16,39 @@ fn main() {
     img.save("receipt_contrast.png").unwrap();
 
     let start_blob = Instant::now();
-    let all_bounds = blob_find(&img);
+    let mut all_bounds = blob_find(&img);
     let end_blob = start_blob.elapsed();
 
 
     // Find top left blob, already pre-sort by starting height (top left pixel)
-
+    all_bounds.sort_by(|a, b| {
+        if a.0.0 < b.0.0 || a.0.1 < b.0.1 {
+            Ordering::Less
+        } else if a.0.0 == b.0.0 && a.0.1 == b.0.1 {
+            Ordering::Equal
+        } else {
+            Ordering::Greater
+        }
+    });
+    for bound in &all_bounds {
+        print_bounds(bound);
+    }
+    // Gedankendump:
+    /*
+        Nimm die ersten Buchstaben die irgendwie groß genug sind maybe, maybe Größe erstmal
+        ignorieren.
+        Als nächstes erstmal ne Linie ziehen vom ersten Buchstaben oben links nach ganz rechts,
+        dannach eine Linie ziehen vom ersten Buchstaben unten links nach ganz rechts.
+        Alles was dazwischen ist, ist in der Row included.
+        Alles was davon geschnitten wird muss nach irgend einer heuristic auch in der Row included
+        sein, das kann zum Beispiel vorkommen, wenn das Komme unter dem ersten Buchstaben liegt.
+        Es sollte nie komplett drunter liegen, aber kann knapp werden.
+        Die Kommata sind eigentlich die einzigen special cases.
+        Ggf. wenn man eine Row fertig hat noch im Anschluss von der niedrigsten Box nochmal ne Linie
+        unten ziehen, falls das nicht reicht. Ansonsten vielleicht einfach eine Linie
+        durch den Mittelpunkt aller Boxen (statistischer Average oder so) und dann anhand dem
+        Abstand zum Mittelpunkt der Boxen entscheiden oder so
+     */
 
 
     let start_boxes = Instant::now();
@@ -76,15 +104,13 @@ fn add_contrast_filter(img: &mut RgbImage) {
 }
 
 fn blob_find(img: &RgbImage) -> Vec<((u32, u32), (u32, u32))> {
-    let mut black_pixels: Vec<_> = img
+    let mut black_pixels = img
         .enumerate_pixels()
-        .filter(|p| is_black(&p.2.0))
-        .collect();
+        .filter(|p| is_black(&p.2.0));
     let mut all_bounds = Vec::new();
     let mut visited = HashSet::new();
     let mut stack = Vec::new();
-    while !black_pixels.is_empty() {
-        let pixel = black_pixels.pop().unwrap(); // it exists (!stack.is_empty())
+    while let Some(pixel) = black_pixels.next() {
         stack.push((pixel.0, pixel.1));
         if visited.contains(&(pixel.0, pixel.1)) {
             continue;
@@ -118,16 +144,25 @@ fn blob_find(img: &RgbImage) -> Vec<((u32, u32), (u32, u32))> {
     all_bounds
 }
 
+#[allow(unused)]
 fn print_bounds(
     (top_left, bottom_right): &((u32, u32), (u32, u32))
 ) {
+    let size = bounds_size(&(*top_left, *bottom_right));
     println!(
-        "top left: ({}, {}), bottom right: ({}, {})",
+        "top left: ({}, {}), bottom right: ({}, {}), size: {}",
         top_left.0,
         top_left.1,
         bottom_right.0,
         bottom_right.1,
+        size,
     )
+}
+
+fn bounds_size(
+    (top_left, bottom_right): &((u32, u32), (u32, u32))
+) -> u32 {
+    (bottom_right.0 - top_left.0) * (bottom_right.1 - top_left.1)
 }
 
 fn update_bounds(
