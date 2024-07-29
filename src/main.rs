@@ -104,12 +104,6 @@ fn main() {
     println!("Rows length: {}", row_candidates.len());
     //draw_bounding_boxes_for_row(&mut img, &row_candidates[20]);
 
-    fn distance(a: Point, b: Point) -> f32 {
-        let x = (b.x - a.x).pow(2) as f32;
-        let y = (b.y - a.y).pow(2) as f32;
-        (x + y).sqrt()
-    }
-
     let mut heights = Vec::new(); // TODO: remove; used for debugging
     // Post process the rows
     let post_process_start = Instant::now();
@@ -117,7 +111,7 @@ fn main() {
     let mut rows_cleaned = Vec::new();
     for candidate in &row_candidates {
         let average_y = candidate.iter()
-            .map(|b| (b.bottom_right.y - (b.height() / 2)))
+            .map(|b| b.middle_point().y)
             .sum::<u32>() / candidate.len() as u32;
         let average_height = candidate.iter()
             .map(|b| b.height())
@@ -140,7 +134,7 @@ fn main() {
     }
     let post_process_end = post_process_start.elapsed();
 
-    let mut colors = [[255, 0, 0], [0, 255, 0], [0, 0, 255]].iter().cycle();
+    let mut colors = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [47, 116, 89], [147, 68, 40], [0, 255, 255]].iter().cycle();
     for i in 0..rows_cleaned.len() {
         let color = colors.next().unwrap().clone();
         let color = Rgb(color);
@@ -209,6 +203,12 @@ fn main() {
     println!("Post process took {post_process} micros");
 }
 
+// TODO: also refactor this?
+fn distance(a: Point, b: Point) -> f32 {
+    let x = (b.x - a.x).pow(2) as f32;
+    let y = (b.y - a.y).pow(2) as f32;
+    (x + y).sqrt()
+}
 
 // TODO: Refactor this for like box.is_inside(other_box) or smth
 fn is_inside(row_box: &BoundBox, other_bound: &BoundBox) -> bool {
