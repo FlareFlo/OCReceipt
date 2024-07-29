@@ -104,50 +104,23 @@ fn main() {
     println!("Rows length: {}", row_candidates.len());
     //draw_bounding_boxes_for_row(&mut img, &row_candidates[20]);
 
-    let mut heights = Vec::new(); // TODO: remove; used for debugging
     // Post process the rows
     let post_process_start = Instant::now();
-    let mut visited = HashSet::new();
-    let mut rows_cleaned = Vec::new();
-    for candidate in &row_candidates {
-        let average_y = candidate.iter()
-            .map(|b| b.middle_point().y)
-            .sum::<u32>() / candidate.len() as u32;
-        let average_height = candidate.iter()
-            .map(|b| b.height())
-            .sum::<u32>() / candidate.len() as u32;
-        let mut cleaned_row = Vec::new();
-        for bound_box in &all_bounds {
-            if visited.contains(bound_box) { continue }
-            let distance_to_average_y = bound_box.middle_point().y.abs_diff(average_y);
-            if distance_to_average_y < average_height {
-                visited.insert(bound_box.clone());
-                cleaned_row.push(bound_box);
-            }
-        }
 
-        if !cleaned_row.is_empty() {
-            heights.push((average_y, cleaned_row.clone()));
-            rows_cleaned.push(cleaned_row);
-            println!("average_y {average_y}");
-        }
-    }
     let post_process_end = post_process_start.elapsed();
 
-    let mut colors = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [47, 116, 89], [147, 68, 40], [0, 255, 255]].iter().cycle();
-    for i in 0..rows_cleaned.len() {
+    let mut colors = [
+        [255, 0, 0],
+        [0, 255, 0],
+        [0, 0, 255],
+        //[47, 116, 89],
+        //[147, 68, 40],
+        [0, 255, 255]
+    ].iter().cycle();
+    for i in 0..row_candidates.len() {
         let color = colors.next().unwrap().clone();
         let color = Rgb(color);
-        draw_bounding_boxes_for_row(&mut img, &rows_cleaned[i], color);
-        rows_cleaned[i].sort_by(|a, b| {
-            a.top_left.x.cmp(&b.top_left.x)
-        });
-        let a = rows_cleaned[i][0].top_left.y;
-        println!("Height: {}, top_left: {a}", heights[i].0);
-        // TODO: remove; for debugging
-        for j in 0..width {
-            img.put_pixel(j, heights[i].0, color.clone());
-        }
+        draw_bounding_boxes_for_row(&mut img, &row_candidates[i], color);
     }
 
     //draw_bounding_boxes_for_row(&mut img, &rows_cleaned[2], Rgb([255, 0, 0]));
@@ -218,20 +191,23 @@ fn is_inside(row_box: &BoundBox, other_bound: &BoundBox) -> bool {
         && (row_box.bottom_right.y as i32 - other_bound.bottom_right.y as i32) >= 0
 }
 
-fn draw_bounding_boxes(img: &mut RgbImage, all_bounds: &Vec<((u32, u32), (u32, u32))>) {
+fn draw_bounding_boxes(img: &mut RgbImage, all_bounds: &Vec<BoundBox>) {
     let (width, height) = img.dimensions();
+    let all_bounds = all_bounds
+        .iter()
+        .map(|b| (b.top_left, b.bottom_right));
     let box_color = Rgb([0, 255, 0]);
     for (top_left, bottom_right) in all_bounds {
-        for x in top_left.0..=bottom_right.0 {
+        for x in top_left.x..=bottom_right.x {
             if x > 0 && x < width {
-                img.put_pixel(x, top_left.1, box_color.clone());
-                img.put_pixel(x, bottom_right.1, box_color.clone());
+                img.put_pixel(x, top_left.y, box_color.clone());
+                img.put_pixel(x, bottom_right.y, box_color.clone());
             }
         }
-        for y in top_left.1..=bottom_right.1 {
+        for y in top_left.y..=bottom_right.y {
             if y > 0 && y < height {
-                img.put_pixel(top_left.0, y, box_color.clone());
-                img.put_pixel(bottom_right.0, y, box_color.clone());
+                img.put_pixel(top_left.x, y, box_color.clone());
+                img.put_pixel(bottom_right.x, y, box_color.clone());
             }
         }
     }
