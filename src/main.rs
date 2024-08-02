@@ -80,25 +80,7 @@ fn main() {
     }
 
     let begin_row_candidates = Instant::now();
-    let (width, height) = img.dimensions();
-    let mut row_candidates = Vec::new();
-    let mut visited = HashSet::new();
-    let mut row_box: BoundBox;
-    for bound in &all_bounds {
-        if visited.contains(bound) { continue; }
-        row_box = ((0, bound.top_left.y.saturating_sub(25)), (width, bound.bottom_right.y + 25)).into();
-
-        let mut row = Vec::new();
-        for other_bound in &all_bounds {
-            if visited.contains(other_bound) { continue }
-            if is_inside(&row_box, other_bound) {
-                row.push(other_bound);
-                visited.insert(other_bound);
-            }
-        }
-
-        row_candidates.push(row);
-    }
+    let row_candidates = get_row_candidates(&mut img, &all_bounds);
     let end_row_candidates = begin_row_candidates.elapsed();
 
     println!("Rows length: {}", row_candidates.len());
@@ -132,7 +114,7 @@ fn main() {
         .open("balls.csv").unwrap();
 
     for bound in &all_bounds {
-        let x = bound.top_left.x;
+        let _x = bound.top_left.x;
         let y = bound.top_left.y;
         use std::io::Write;
         writeln!(csv, "{y}").unwrap();
@@ -174,6 +156,31 @@ fn main() {
     println!("Boxes took {time_boxes} millis");
     println!("Row candidates took {row_candidates} micros");
     println!("Post process took {post_process} micros");
+}
+
+// TODO: Version 1 of row algorithm, would need a post-process step
+fn get_row_candidates<'a>(img: &mut RgbImage, all_bounds: &'a Vec<BoundBox>) -> Vec<Vec<&'a BoundBox>> {
+    let (width, height) = img.dimensions();
+    let mut row_candidates = Vec::new();
+    let mut visited = HashSet::new();
+    let mut row_box: BoundBox;
+    for bound in all_bounds {
+        if visited.contains(bound) { continue; }
+        row_box = ((0, bound.top_left.y.saturating_sub(25)), (width, bound.bottom_right.y + 25)).into();
+
+        let mut row = Vec::new();
+        for other_bound in all_bounds {
+            if visited.contains(other_bound) { continue }
+            if is_inside(&row_box, other_bound) {
+                row.push(other_bound);
+                visited.insert(other_bound);
+            }
+        }
+
+        row_candidates.push(row);
+    }
+
+    row_candidates
 }
 
 // TODO: also refactor this?
