@@ -1,8 +1,10 @@
+use image::{ImageReader, Rgb, RgbImage};
+use std::array;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::ops::Index;
+use std::sync::LazyLock;
 use std::time::Instant;
-use image::{ImageReader, Rgb, RgbImage};
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
 struct Point {
@@ -40,8 +42,14 @@ impl From<((u32, u32), (u32, u32))> for BoundBox {
 impl From<&((u32, u32), (u32, u32))> for BoundBox {
     fn from(value: &((u32, u32), (u32, u32))) -> Self {
         Self {
-            top_left: Point { x: value.0.0, y: value.0.1 },
-            bottom_right: Point { x: value.1.0, y: value.1.1 },
+            top_left: Point {
+                x: value.0 .0,
+                y: value.0 .1,
+            },
+            bottom_right: Point {
+                x: value.1 .0,
+                y: value.1 .1,
+            },
         }
     }
 }
@@ -61,9 +69,7 @@ fn main() {
     let mut all_bounds = blob_find(&img);
     let end_blob = start_blob.elapsed();
 
-    let mut all_bounds = all_bounds.iter()
-        .map(BoundBox::from)
-        .collect::<Vec<_>>();
+    let mut all_bounds = all_bounds.iter().map(BoundBox::from).collect::<Vec<_>>();
 
     all_bounds.sort_by(|a, b| {
         if a.top_left.y < b.top_left.y {
@@ -97,8 +103,10 @@ fn main() {
         [0, 0, 255],
         //[47, 116, 89],
         //[147, 68, 40],
-        [0, 255, 255]
-    ].iter().cycle();
+        [0, 255, 255],
+    ]
+    .iter()
+    .cycle();
     for i in 0..row_candidates.len() {
         let color = colors.next().unwrap().clone();
         let color = Rgb(color);
@@ -107,11 +115,11 @@ fn main() {
 
     //draw_bounding_boxes_for_row(&mut img, &rows_cleaned[2], Rgb([255, 0, 0]));
 
-
     let mut csv = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
-        .open("balls.csv").unwrap();
+        .open("balls.csv")
+        .unwrap();
 
     for bound in &all_bounds {
         let _x = bound.top_left.x;
@@ -120,24 +128,22 @@ fn main() {
         writeln!(csv, "{y}").unwrap();
     }
 
-
     // Gedankendump:
     /*
-        Nimm die ersten Buchstaben die irgendwie groß genug sind maybe, maybe Größe erstmal
-        ignorieren.
-        Als nächstes erstmal ne Linie ziehen vom ersten Buchstaben oben links nach ganz rechts,
-        dannach eine Linie ziehen vom ersten Buchstaben unten links nach ganz rechts.
-        Alles was dazwischen ist, ist in der Row included.
-        Alles was davon geschnitten wird muss nach irgend einer heuristic auch in der Row included
-        sein, das kann zum Beispiel vorkommen, wenn das Komme unter dem ersten Buchstaben liegt.
-        Es sollte nie komplett drunter liegen, aber kann knapp werden.
-        Die Kommata sind eigentlich die einzigen special cases.
-        Ggf. wenn man eine Row fertig hat noch im Anschluss von der niedrigsten Box nochmal ne Linie
-        unten ziehen, falls das nicht reicht. Ansonsten vielleicht einfach eine Linie
-        durch den Mittelpunkt aller Boxen (statistischer Average oder so) und dann anhand dem
-        Abstand zum Mittelpunkt der Boxen entscheiden oder so
-     */
-
+       Nimm die ersten Buchstaben die irgendwie groß genug sind maybe, maybe Größe erstmal
+       ignorieren.
+       Als nächstes erstmal ne Linie ziehen vom ersten Buchstaben oben links nach ganz rechts,
+       dannach eine Linie ziehen vom ersten Buchstaben unten links nach ganz rechts.
+       Alles was dazwischen ist, ist in der Row included.
+       Alles was davon geschnitten wird muss nach irgend einer heuristic auch in der Row included
+       sein, das kann zum Beispiel vorkommen, wenn das Komme unter dem ersten Buchstaben liegt.
+       Es sollte nie komplett drunter liegen, aber kann knapp werden.
+       Die Kommata sind eigentlich die einzigen special cases.
+       Ggf. wenn man eine Row fertig hat noch im Anschluss von der niedrigsten Box nochmal ne Linie
+       unten ziehen, falls das nicht reicht. Ansonsten vielleicht einfach eine Linie
+       durch den Mittelpunkt aller Boxen (statistischer Average oder so) und dann anhand dem
+       Abstand zum Mittelpunkt der Boxen entscheiden oder so
+    */
 
     let start_boxes = Instant::now();
     //draw_bounding_boxes(&mut img, &all_bounds);
@@ -159,18 +165,29 @@ fn main() {
 }
 
 // TODO: Version 1 of row algorithm, would need a post-process step
-fn get_row_candidates<'a>(img: &mut RgbImage, all_bounds: &'a Vec<BoundBox>) -> Vec<Vec<&'a BoundBox>> {
+fn get_row_candidates<'a>(
+    img: &mut RgbImage,
+    all_bounds: &'a Vec<BoundBox>,
+) -> Vec<Vec<&'a BoundBox>> {
     let (width, height) = img.dimensions();
     let mut row_candidates = Vec::new();
     let mut visited = HashSet::new();
     let mut row_box: BoundBox;
     for bound in all_bounds {
-        if visited.contains(bound) { continue; }
-        row_box = ((0, bound.top_left.y.saturating_sub(25)), (width, bound.bottom_right.y + 25)).into();
+        if visited.contains(bound) {
+            continue;
+        }
+        row_box = (
+            (0, bound.top_left.y.saturating_sub(25)),
+            (width, bound.bottom_right.y + 25),
+        )
+            .into();
 
         let mut row = Vec::new();
         for other_bound in all_bounds {
-            if visited.contains(other_bound) { continue }
+            if visited.contains(other_bound) {
+                continue;
+            }
             if is_inside(&row_box, other_bound) {
                 row.push(other_bound);
                 visited.insert(other_bound);
@@ -200,9 +217,7 @@ fn is_inside(row_box: &BoundBox, other_bound: &BoundBox) -> bool {
 
 fn draw_bounding_boxes(img: &mut RgbImage, all_bounds: &Vec<BoundBox>) {
     let (width, height) = img.dimensions();
-    let all_bounds = all_bounds
-        .iter()
-        .map(|b| (b.top_left, b.bottom_right));
+    let all_bounds = all_bounds.iter().map(|b| (b.top_left, b.bottom_right));
     let box_color = Rgb([0, 255, 0]);
     for (top_left, bottom_right) in all_bounds {
         for x in top_left.x..=bottom_right.x {
@@ -239,12 +254,24 @@ fn draw_bounding_boxes_for_row(img: &mut RgbImage, row: &Vec<&BoundBox>, color: 
 }
 
 fn add_contrast_filter(img: &mut RgbImage) {
+    static LLT: LazyLock<[f32; u8::MAX as usize * 3]> = LazyLock::new(|| {
+        array::from_fn(|e| match e {
+            0..255 => e as f32 * 0.2126f32,
+            255..512 => e as f32 * 0.7152,
+            512.. => e as f32 * 0.0722,
+        })
+    });
+
+    let is_luma = |[r, g, b]: [u8; 3]| {
+        let r = LLT[r as usize];
+        let g = LLT[g as usize + 255];
+        let b = LLT[b as usize + 255 * 2];
+        (r + g + b) < 112.5
+    };
+
     for pixel in img.enumerate_pixels_mut() {
-        let rgb_values = &mut pixel.2.0;
-        let luma = 0.2126f32 * rgb_values[0] as f32
-            + 0.7152 * rgb_values[1] as f32
-            + 0.0722 * rgb_values[2] as f32;
-        if luma < 112.5 {
+        let rgb_values = &mut pixel.2 .0;
+        if is_luma(*rgb_values) {
             rgb_values[0] = 0;
             rgb_values[1] = 0;
             rgb_values[2] = 0;
@@ -257,9 +284,7 @@ fn add_contrast_filter(img: &mut RgbImage) {
 }
 
 fn blob_find(img: &RgbImage) -> Vec<((u32, u32), (u32, u32))> {
-    let mut black_pixels = img
-        .enumerate_pixels()
-        .filter(|p| is_black(&p.2.0));
+    let mut black_pixels = img.enumerate_pixels().filter(|p| is_black(&p.2 .0));
     let mut all_bounds = Vec::new();
     let mut visited = HashSet::new();
     let mut stack = Vec::new();
@@ -282,7 +307,7 @@ fn blob_find(img: &RgbImage) -> Vec<((u32, u32), (u32, u32))> {
                     stack.push((curr_x + 1, curr_y));
                     stack.push((curr_x, curr_y + 1));
                     stack.push((curr_x - 1, curr_y));
-                    stack.push((curr_x , curr_y - 1));
+                    stack.push((curr_x, curr_y - 1));
                 }
             }
 
@@ -298,36 +323,33 @@ fn blob_find(img: &RgbImage) -> Vec<((u32, u32), (u32, u32))> {
 }
 
 #[allow(unused)]
-fn print_bounds(
-    bounds: &BoundBox,
-) {
+fn print_bounds(bounds: &BoundBox) {
     let (top_left, bottom_right) = (bounds.top_left, bounds.bottom_right);
     let size = bounds_size(&bounds);
     println!(
         "top left: ({}, {}), bottom right: ({}, {}), size: {}",
-        top_left.x,
-        top_left.y,
-        bottom_right.x,
-        bottom_right.y,
-        size,
+        top_left.x, top_left.y, bottom_right.x, bottom_right.y, size,
     )
 }
 
-fn bounds_size(
-    bounds: &BoundBox,
-) -> u32 {
+fn bounds_size(bounds: &BoundBox) -> u32 {
     let (top_left, bottom_right) = (bounds.top_left, bounds.bottom_right);
     (bottom_right.x - top_left.x) * (bottom_right.y - top_left.y)
 }
 
-fn update_bounds(
-    (top_left, bottom_right): &mut ((u32, u32), (u32, u32)),
-    (x, y): (u32, u32)
-) {
-    if x < top_left.0 { top_left.0 = x }
-    if y < top_left.1 { top_left.1 = y }
-    if x > bottom_right.0 { bottom_right.0 = x }
-    if y > bottom_right.1 { bottom_right.1 = y }
+fn update_bounds((top_left, bottom_right): &mut ((u32, u32), (u32, u32)), (x, y): (u32, u32)) {
+    if x < top_left.0 {
+        top_left.0 = x
+    }
+    if y < top_left.1 {
+        top_left.1 = y
+    }
+    if x > bottom_right.0 {
+        bottom_right.0 = x
+    }
+    if y > bottom_right.1 {
+        bottom_right.1 = y
+    }
 }
 
 fn new_bounds() -> ((u32, u32), (u32, u32)) {
@@ -337,22 +359,22 @@ fn new_bounds() -> ((u32, u32), (u32, u32)) {
 struct Square {
     x: u32,
     y: u32,
-    pixels: [[[u8; 3]; 3]; 3]
+    pixels: [[[u8; 3]; 3]; 3],
 }
 
 impl Square {
     fn xy(&self) -> (u32, u32) {
         (self.x, self.y)
     }
-    
+
     fn x(&self) -> u32 {
         self.x
     }
-    
+
     fn y(&self) -> u32 {
         self.y
     }
-    
+
     fn contains_black(&self) -> bool {
         self.count_blacks() > 0
     }
@@ -380,19 +402,26 @@ impl Index<usize> for Square {
 // x, y is the top left corner of the square
 fn get_square(img: &RgbImage, x: u32, y: u32) -> Square {
     let pixels = [
-        [img.get_pixel(x, y).0, img.get_pixel(x + 1, y).0, img.get_pixel(x + 2, y).0],
-        [img.get_pixel(x, y + 1).0, img.get_pixel(x + 1, y + 1).0, img.get_pixel(x + 2, y + 1).0],
-        [img.get_pixel(x, y + 2).0, img.get_pixel(x + 1, y + 2).0, img.get_pixel(x + 2, y + 2).0],
+        [
+            img.get_pixel(x, y).0,
+            img.get_pixel(x + 1, y).0,
+            img.get_pixel(x + 2, y).0,
+        ],
+        [
+            img.get_pixel(x, y + 1).0,
+            img.get_pixel(x + 1, y + 1).0,
+            img.get_pixel(x + 2, y + 1).0,
+        ],
+        [
+            img.get_pixel(x, y + 2).0,
+            img.get_pixel(x + 1, y + 2).0,
+            img.get_pixel(x + 2, y + 2).0,
+        ],
     ];
 
-    Square {
-        x,
-        y,
-        pixels
-    }
+    Square { x, y, pixels }
 }
 
-fn is_black(rgb: &[u8;3]) -> bool {
+fn is_black(rgb: &[u8; 3]) -> bool {
     (rgb[0] as u16 + rgb[1] as u16 + rgb[2] as u16) == 0
 }
-
