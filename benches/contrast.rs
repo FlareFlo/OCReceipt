@@ -37,7 +37,7 @@ fn contrast_filter_ints_bencher(bencher: Bencher) {
             img
         })
         .counter(get_image_byte_count())
-        .bench_values(|mut img| add_contrast_filter(&mut img));
+        .bench_values(|mut img| add_contrast_filter_ints(&mut img));
 }
 
 
@@ -51,10 +51,10 @@ fn contrast_filter_floats_bencher(bencher: Bencher) {
             img
         })
         .counter(get_image_byte_count())
-        .bench_values(|mut img| add_contrast_filter(&mut img));
+        .bench_values(|mut img| add_contrast_filter_floats(&mut img));
 }
 
-fn add_contrast_filter(img: &mut RgbImage) {
+fn add_contrast_filter_ints(img: &mut RgbImage) {
     for pixel in img.enumerate_pixels_mut() {
         let rgb_values = &mut pixel.2.0;
         let luma = (rgb_values[0] as u32) * 2126
