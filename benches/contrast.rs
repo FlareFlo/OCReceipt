@@ -1,4 +1,8 @@
 use image::{ImageReader, Rgb, RgbImage};
+use divan::counter::BytesCount;
+use divan::AllocProfiler;
+use divan::Bencher;
+
 
 fn main() {
     let img = ImageReader::open("receipt.jpg").unwrap().decode().unwrap();
@@ -8,9 +12,7 @@ fn main() {
     divan::main();
 }
 
-use divan::Bencher;
-use divan::counter::BytesCount;
-use divan::AllocProfiler;
+
 
 #[global_allocator]
 static ALLOC: AllocProfiler = AllocProfiler::system();
@@ -58,7 +60,9 @@ fn add_contrast_filter(img: &mut RgbImage) {
         let luma = (rgb_values[0] as u32) * 2126
             + (rgb_values[1] as u32) * 7152
             + (rgb_values[2] as u32) * 722;
-        if luma < 1125000 {                                                                                                                                                                                                                                                               rgb_values[0] = 0;                                                                                                                                                                                                                                                            rgb_values[1] = 0;
+        if luma < 1125000 {
+            rgb_values[0] = 0;
+            rgb_values[1] = 0;
             rgb_values[2] = 0;
         } else {
             rgb_values[0] = 255;
